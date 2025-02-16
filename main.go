@@ -9,6 +9,10 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
+
+	"github.com/drakedeloz/pokedexcli/internal/pokecache"
+	"github.com/fatih/color"
 )
 
 type cliCommand struct {
@@ -34,6 +38,8 @@ type LocationAreaResp struct {
 	Results  []LocationArea `json:"results"`
 }
 
+var cache = pokecache.NewCache(15 * time.Minute)
+
 func main() {
 	cfg := &Config{
 		Next:     nil,
@@ -42,7 +48,7 @@ func main() {
 	scanner := bufio.NewScanner(os.Stdin)
 	commands := getCommands()
 	for {
-		fmt.Print("Pokedex > ")
+		color.RGB(140, 160, 250).Print("Pokedex > ")
 		scanner.Scan()
 		userInput := cleanInput(scanner.Text())
 		c, ok := commands[userInput[0]]
@@ -98,10 +104,11 @@ func commandExit(cfg *Config) error {
 func commandHelp(cfg *Config) error {
 	commands := getCommands()
 	fmt.Println("Welcome to the Pokedex!")
-	fmt.Println("Usage:\n")
+	fmt.Print("Usage:\n\n")
 	for _, c := range commands {
 		fmt.Printf("%s: %s\n", c.Name, c.Description)
 	}
+	fmt.Print("\n")
 	return nil
 }
 
@@ -137,19 +144,28 @@ func commandMapb(cfg *Config) error {
 ////
 
 func mapHelper(url string, cfg *Config) error {
-	res, err := http.Get(url)
-	if err != nil {
-		return err
-	}
-	if res.StatusCode > 299 {
-		log.Fatalf("Response failed with status code: %d", res.StatusCode)
-	}
-	defer res.Body.Close()
-	body, err := io.ReadAll(res.Body)
-	if err != nil {
-		return err
-	}
 	var resp LocationAreaResp
+	var body []byte
+	var err error
+
+	if data, found := cache.Get(url); found {
+		body = data
+		color.RGB(140, 160, 250).Print("Displaying Cached Data\n")
+	} else {
+		res, err := http.Get(url)
+		if err != nil {
+			return err
+		}
+		if res.StatusCode > 299 {
+			log.Fatalf("Response failed with status code: %d", res.StatusCode)
+		}
+		defer res.Body.Close()
+		body, err = io.ReadAll(res.Body)
+		if err != nil {
+			return err
+		}
+		cache.Add(url, body)
+	}
 	err = json.Unmarshal(body, &resp)
 	if err != nil {
 		return err
@@ -161,5 +177,6 @@ func mapHelper(url string, cfg *Config) error {
 	for _, result := range resp.Results {
 		fmt.Println(result.Name)
 	}
+
 	return nil
 }
