@@ -18,7 +18,7 @@ import (
 type cliCommand struct {
 	Name        string
 	Description string
-	Callback    func(*Config) error
+	Callback    func(*Config, string) error
 }
 
 type Config struct {
@@ -52,11 +52,15 @@ func main() {
 		scanner.Scan()
 		userInput := cleanInput(scanner.Text())
 		c, ok := commands[userInput[0]]
+		param := ""
+		if len(userInput) > 1 {
+			param = userInput[1]
+		}
 		if !ok {
 			fmt.Println("Unknown command")
 			continue
 		}
-		c.Callback(cfg)
+		c.Callback(cfg, param)
 	}
 }
 
@@ -80,6 +84,11 @@ func getCommands() map[string]cliCommand {
 			Description: "Get a list of the previous 20 location areas in the Pokemon world",
 			Callback:    commandMapb,
 		},
+		"explore": {
+			Name:        "explore",
+			Description: "Explore an area to find all the Pokemon available there",
+			Callback:    commandExplore,
+		},
 		"help": {
 			Name:        "help",
 			Description: "Show all commands",
@@ -95,13 +104,13 @@ func getCommands() map[string]cliCommand {
 
 // COMMAND FUNCTIONS //
 
-func commandExit(cfg *Config) error {
+func commandExit(cfg *Config, param string) error {
 	fmt.Println("Closing the Pokedex... Goodbye!")
 	os.Exit(0)
 	return nil
 }
 
-func commandHelp(cfg *Config) error {
+func commandHelp(cfg *Config, param string) error {
 	commands := getCommands()
 	fmt.Println("Welcome to the Pokedex!")
 	fmt.Print("Usage:\n\n")
@@ -112,7 +121,7 @@ func commandHelp(cfg *Config) error {
 	return nil
 }
 
-func commandMap(cfg *Config) error {
+func commandMap(cfg *Config, param string) error {
 	var url string
 	if cfg.Next == nil {
 		url = "https://pokeapi.co/api/v2/location-area/"
@@ -126,7 +135,7 @@ func commandMap(cfg *Config) error {
 	return nil
 }
 
-func commandMapb(cfg *Config) error {
+func commandMapb(cfg *Config, param string) error {
 	var url string
 	if cfg.Previous == nil {
 		fmt.Println("You're on the first page.")
@@ -138,6 +147,10 @@ func commandMapb(cfg *Config) error {
 	if err != nil {
 		return err
 	}
+	return nil
+}
+
+func commandExplore(cfg *Config, param string) error {
 	return nil
 }
 
