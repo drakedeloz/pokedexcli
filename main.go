@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"os"
 	"strings"
 	"time"
@@ -41,14 +42,37 @@ type LocationPokemon struct {
 	PokemonEncounters []PokemonEncounters `json:"pokemon_encounters"`
 }
 type Pokemon struct {
+	BaseExperience int     `json:"base_experience"`
+	Height         int     `json:"height"`
+	Name           string  `json:"name"`
+	Stats          []Stats `json:"stats"`
+	Types          []Types `json:"types"`
+	Weight         int     `json:"weight"`
+}
+type Stat struct {
 	Name string `json:"name"`
 	URL  string `json:"url"`
+}
+type Stats struct {
+	BaseStat int  `json:"base_stat"`
+	Effort   int  `json:"effort"`
+	Stat     Stat `json:"stat"`
+}
+type Type struct {
+	Name string `json:"name"`
+	URL  string `json:"url"`
+}
+type Types struct {
+	Slot int  `json:"slot"`
+	Type Type `json:"type"`
 }
 type PokemonEncounters struct {
 	Pokemon Pokemon `json:"pokemon"`
 }
 
+var rng = rand.New(rand.NewSource(time.Now().UnixNano()))
 var cache = pokecache.NewCache(15 * time.Minute)
+var pokedex = map[string]Pokemon{}
 
 func main() {
 	cfg := &Config{
@@ -99,6 +123,11 @@ func getCommands() map[string]cliCommand {
 			Description: "Explore an area to find all the Pokemon available there",
 			Callback:    commandExplore,
 		},
+		"catch": {
+			Name:        "catch",
+			Description: "Attempt to catch a Pokemon",
+			Callback:    commandCatch,
+		},
 		"help": {
 			Name:        "help",
 			Description: "Show all commands",
@@ -108,6 +137,16 @@ func getCommands() map[string]cliCommand {
 			Name:        "exit",
 			Description: "Exit the Pokedex",
 			Callback:    commandExit,
+		},
+		"inspect": {
+			Name:        "inspect",
+			Description: "Show details about a Pokemon you have caught",
+			Callback:    commandInspect,
+		},
+		"pokedex": {
+			Name:        "pokedex",
+			Description: "Show a list of all the Pokemon you have caught",
+			Callback:    commandPokedex,
 		},
 	}
 }
@@ -172,6 +211,7 @@ func commandExplore(cfg *Config, param string) error {
 
 	body, err = pokeget.GetResource(cache, url)
 	if err != nil {
+		fmt.Println(err)
 		return err
 	}
 	err = json.Unmarshal(body, &resp)
@@ -184,6 +224,79 @@ func commandExplore(cfg *Config, param string) error {
 
 	for _, item := range resp.PokemonEncounters {
 		fmt.Printf(" - %s\n", item.Pokemon.Name)
+	}
+	return nil
+}
+
+func commandCatch(cfg *Config, param string) error {
+	if param == "" {
+		fmt.Println("You must specify a Pokemon to catch")
+		return nil
+	}
+	url := "https://pokeapi.co/api/v2/pokemon/" + param
+	var resp Pokemon
+	pokemonData, err := pokeget.GetResource(cache, url)
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+	err = json.Unmarshal(pokemonData, &resp)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Throwing a Pokeball at %s", resp.Name)
+	time.Sleep(1 * time.Second)
+	fmt.Print(".")
+	time.Sleep(1 * time.Second)
+	fmt.Print(".")
+	time.Sleep(1 * time.Second)
+	fmt.Print(".\n")
+
+	maxExp := 340.0
+	threshold := 100 - ((float64(resp.BaseExperience) / maxExp) * 90)
+	chance := float64(rng.Intn(100))
+	caught := chance < threshold
+	if caught {
+		fmt.Printf("%s was caught!\n", resp.Name)
+		pokedex[resp.Name] = resp
+	} else {
+		fmt.Printf("%s escaped!\n", resp.Name)
+	}
+	return nil
+}
+
+func commandInspect(cfg *Config, param string) error {
+	if param == "" {
+		fmt.Println("You must specify a Pokemon to inspect")
+		return nil
+	}
+	if pokemon, found := pokedex[param]; found {
+		fmt.Printf("Name: %s\n", pokemon.Name)
+		fmt.Printf("Height: %d\n", pokemon.Height)
+		fmt.Printf("Weight: %d\n", pokemon.Weight)
+		fmt.Println("Stats:")
+		for _, stat := range pokemon.Stats {
+			fmt.Printf("  -%s: %d\n", stat.Stat.Name, stat.BaseStat)
+		}
+		fmt.Println("Types:")
+		for _, pokemonType := range pokemon.Types {
+			fmt.Printf("  -%s\n", pokemonType.Type.Name)
+		}
+	} else {
+		fmt.Println("You have not caught that Pokemon yet")
+	}
+	return nil
+}
+
+func commandPokedex(cfg *Config, param string) error {
+	if len(pokedex) == 0 {
+		fmt.Println("You have not caught any Pokemon")
+		return nil
+	}
+	fmt.Println("Your Pokedex:")
+	for _, pokemon := range pokedex {
+		fmt.Printf(" - %s\n", pokemon.Name)
 	}
 	return nil
 }
