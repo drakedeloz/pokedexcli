@@ -4,14 +4,12 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"io"
-	"log"
-	"net/http"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/drakedeloz/pokedexcli/internal/pokecache"
+	"github.com/drakedeloz/pokedexcli/internal/pokeget"
 	"github.com/fatih/color"
 )
 
@@ -36,6 +34,18 @@ type LocationAreaResp struct {
 	Next     *string        `json:"next"`
 	Previous *string        `json:"previous"`
 	Results  []LocationArea `json:"results"`
+}
+
+type LocationPokemon struct {
+	Name              string              `json:"name"`
+	PokemonEncounters []PokemonEncounters `json:"pokemon_encounters"`
+}
+type Pokemon struct {
+	Name string `json:"name"`
+	URL  string `json:"url"`
+}
+type PokemonEncounters struct {
+	Pokemon Pokemon `json:"pokemon"`
 }
 
 var cache = pokecache.NewCache(15 * time.Minute)
@@ -151,6 +161,30 @@ func commandMapb(cfg *Config, param string) error {
 }
 
 func commandExplore(cfg *Config, param string) error {
+	if param == "" {
+		fmt.Println("You must specify a location to explore")
+		return nil
+	}
+	url := "https://pokeapi.co/api/v2/location-area/" + param
+	var resp LocationPokemon
+	var body []byte
+	var err error
+
+	body, err = pokeget.GetResource(cache, url)
+	if err != nil {
+		return err
+	}
+	err = json.Unmarshal(body, &resp)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Exploring %s...\n", param)
+	fmt.Println("Found Pokemon:")
+
+	for _, item := range resp.PokemonEncounters {
+		fmt.Printf(" - %s\n", item.Pokemon.Name)
+	}
 	return nil
 }
 
@@ -158,27 +192,13 @@ func commandExplore(cfg *Config, param string) error {
 
 func mapHelper(url string, cfg *Config) error {
 	var resp LocationAreaResp
-	var body []byte
 	var err error
 
-	if data, found := cache.Get(url); found {
-		body = data
-		color.RGB(140, 160, 250).Print("Displaying Cached Data\n")
-	} else {
-		res, err := http.Get(url)
-		if err != nil {
-			return err
-		}
-		if res.StatusCode > 299 {
-			log.Fatalf("Response failed with status code: %d", res.StatusCode)
-		}
-		defer res.Body.Close()
-		body, err = io.ReadAll(res.Body)
-		if err != nil {
-			return err
-		}
-		cache.Add(url, body)
+	body, err := pokeget.GetResource(cache, url)
+	if err != nil {
+		return err
 	}
+
 	err = json.Unmarshal(body, &resp)
 	if err != nil {
 		return err

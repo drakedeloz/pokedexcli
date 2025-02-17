@@ -11,6 +11,11 @@ type Cache struct {
 	interval time.Duration
 }
 
+type cacheEntry struct {
+	createdAt time.Time
+	val       []byte
+}
+
 func (c *Cache) Add(key string, val []byte) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -42,11 +47,6 @@ func (c *Cache) reapLoop() {
 		}
 		c.mu.Unlock()
 	}
-}
-
-type cacheEntry struct {
-	createdAt time.Time
-	val       []byte
 }
 
 func NewCache(interval time.Duration) *Cache {
